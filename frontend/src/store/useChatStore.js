@@ -3,7 +3,7 @@ import toast from "react-hot-toast";
 import { axiosInstance } from "../lib/axios";
 
 export const useChatStore = create((set, get) => ({
-  messages: [],
+  messages: {}, // Change to an object to store messages by userId
   users: [],
   selectedUser: null,
   isUsersLoading: false,
@@ -29,7 +29,7 @@ export const useChatStore = create((set, get) => ({
     set({ isMessagesLoading: true });
     try {
       const res = await axiosInstance.get(`/messages/${userId}`);
-      set({ messages: { ...messages, [userId]: res.data } });
+      set({ messages: { ...messages, [userId]: res.data } }); // Store messages by userId
     } catch (error) {
       toast.error(error?.response?.data?.error || "Failed to load messages");
     } finally {
@@ -45,7 +45,11 @@ export const useChatStore = create((set, get) => ({
         messageData
       );
       // Optimistic update (adds the new message without waiting for the server response)
-      set({ messages: [...messages, res.data] });
+      const updatedMessages = {
+        ...messages,
+        [selectedUser._id]: [...(messages[selectedUser._id] || []), res.data],
+      };
+      set({ messages: updatedMessages });
     } catch (error) {
       toast.error(error?.response?.data?.error || "Failed to send message");
     }
@@ -54,6 +58,6 @@ export const useChatStore = create((set, get) => ({
   setSelectedUser: (selectedUser) => set({ selectedUser }),
 
   // Real-time message update method
-  setMessages: (updateFn) => 
+  setMessages: (updateFn) =>
     set((state) => ({ messages: updateFn(state.messages) })),
 }));
