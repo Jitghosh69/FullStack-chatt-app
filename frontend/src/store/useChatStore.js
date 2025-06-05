@@ -1,7 +1,6 @@
 import { create } from "zustand";
 import toast from "react-hot-toast";
 import { axiosInstance } from "../lib/axios";
-import { useAuthStore } from "./useAuthStore";
 
 export const useChatStore = create((set, get) => ({
   messages: [],
@@ -23,10 +22,14 @@ export const useChatStore = create((set, get) => ({
   },
 
   getMessages: async (userId) => {
+    const { messages } = get();
+    // Check if messages are already loaded for the selected user
+    if (messages[userId]) return;
+
     set({ isMessagesLoading: true });
     try {
       const res = await axiosInstance.get(`/messages/${userId}`);
-      set({ messages: res.data });
+      set({ messages: { ...messages, [userId]: res.data } });
     } catch (error) {
       toast.error(error?.response?.data?.error || "Failed to load messages");
     } finally {
@@ -41,6 +44,7 @@ export const useChatStore = create((set, get) => ({
         `/messages/send/${selectedUser._id}`,
         messageData
       );
+      // Optimistic update (adds the new message without waiting for the server response)
       set({ messages: [...messages, res.data] });
     } catch (error) {
       toast.error(error?.response?.data?.error || "Failed to send message");
@@ -49,7 +53,7 @@ export const useChatStore = create((set, get) => ({
 
   setSelectedUser: (selectedUser) => set({ selectedUser }),
 
-  // ✅ This allows real-time updates using socket
-  setMessages: (updateFn) =>
+  // Real-time message update method
+  setMessages: (updateFn) => 
     set((state) => ({ messages: updateFn(state.messages) })),
 }));
