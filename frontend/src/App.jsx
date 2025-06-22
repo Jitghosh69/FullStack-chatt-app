@@ -25,22 +25,25 @@ const App = () => {
   }, [checkAuth]);
 
   useEffect(() => {
-    if (!socket) return;
+    if (!socket || !authUser) return;
 
     const handleNewMessage = (newMessage) => {
-      setMessages((prevMessages) => {
-        const updatedMessages = { ...prevMessages };
-        // Determine which chat to update based on sender and receiver IDs
-        const chatUserId =
-          newMessage.senderId === authUser._id
-            ? newMessage.receiverId
-            : newMessage.senderId;
+      const chatUserId =
+        newMessage.senderId === authUser._id
+          ? newMessage.receiverId
+          : newMessage.senderId;
 
-        updatedMessages[chatUserId] = [
-          ...(updatedMessages[chatUserId] || []),
-          newMessage,
-        ];
-        return updatedMessages;
+      setMessages((prevMessages) => {
+        const userMessages = prevMessages[chatUserId] || [];
+
+        // Check if the newMessage already exists in state to avoid duplicates
+        const exists = userMessages.some((msg) => msg._id === newMessage._id);
+        if (exists) return prevMessages; // Skip adding duplicate message
+
+        return {
+          ...prevMessages,
+          [chatUserId]: [...userMessages, newMessage],
+        };
       });
     };
 
@@ -48,10 +51,15 @@ const App = () => {
       setOnlineUsers(users);
     };
 
-    socket.on("connect", () => console.log("✅ Socket connected:", socket.id));
+    socket.on("connect", () => {
+      console.log("✅ Socket connected:", socket.id);
+    });
+
     socket.on("newMessage", handleNewMessage);
     socket.on("getOnlineUsers", handleOnlineUsers);
-    socket.on("disconnect", () => console.log("❌ Socket disconnected"));
+    socket.on("disconnect", () => {
+      console.log("❌ Socket disconnected");
+    });
 
     return () => {
       socket.off("connect");

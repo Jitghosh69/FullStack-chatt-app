@@ -1,18 +1,18 @@
-// src/store/useChatStore.jsx
+// src/store/useChatStore.js
 
 import { create } from "zustand";
 import toast from "react-hot-toast";
 import { axiosInstance } from "../lib/axios";
-import { useAuthStore } from "./useAuthStore";  // Import auth store to get socket
+import { useAuthStore } from "./useAuthStore"; // For socket access
 
 export const useChatStore = create((set, get) => ({
-  messages: {}, // Store messages by userId
+  messages: {}, // userId => [messages]
   users: [],
   selectedUser: null,
   isUsersLoading: false,
   isMessagesLoading: false,
 
-  // Fetch users
+  // Get all users
   getUsers: async () => {
     set({ isUsersLoading: true });
     try {
@@ -25,7 +25,7 @@ export const useChatStore = create((set, get) => ({
     }
   },
 
-  // Fetch messages by userId
+  // Get message history with a user
   getMessages: async (userId) => {
     const { messages } = get();
     if (messages[userId]) return;
@@ -41,34 +41,32 @@ export const useChatStore = create((set, get) => ({
     }
   },
 
-  // Send a message
+  // ✅ Send message — socket will update UI, not local update
   sendMessage: async (messageData) => {
-    const { selectedUser, messages } = get();
+    const { selectedUser } = get();
     try {
       const res = await axiosInstance.post(
         `/messages/send/${selectedUser._id}`,
         messageData
       );
-      const updatedMessages = {
-        ...messages,
-        [selectedUser._id]: [...(messages[selectedUser._id] || []), res.data],
-      };
-      set({ messages: updatedMessages });
 
-      // Emit socket event for real-time updates
+      // Send via socket to trigger real-time update
       const socket = useAuthStore.getState().socket;
       if (socket && socket.connected) {
         socket.emit("sendMessage", res.data);
       }
+
+      // ✅ DO NOT update local state here — to avoid double message bug
+
     } catch (error) {
       toast.error(error?.response?.data?.error || "Failed to send message");
     }
   },
 
-  // Set the selected user
+  // Set which user is selected for chat
   setSelectedUser: (selectedUser) => set({ selectedUser }),
 
-  // Real-time message update method
+  // Update messages — used by socket listener
   setMessages: (updateFn) =>
     set((state) => ({ messages: updateFn(state.messages) })),
 }));

@@ -11,30 +11,45 @@ const io = new Server(server, {
   },
 });
 
+// Map to store online users: userId -> socketId
+const userSocketMap = {};
+
+// Helper to get socket ID by userId
 export function getReceiverSocketId(userId) {
   return userSocketMap[userId];
 }
-
-// used to store online users
-const userSocketMap = {}; // {userId: socketId}
 
 io.on("connection", (socket) => {
   console.log("A user connected", socket.id);
 
   const userId = socket.handshake.query.userId;
-  if (userId) userSocketMap[userId] = socket.id;
+  if (userId) {
+    userSocketMap[userId] = socket.id;
+  }
 
-  // Emit the current online users to all clients
+  // Notify all clients about online users
   io.emit("getOnlineUsers", Object.keys(userSocketMap));
 
-  // **Add this to listen for messages and broadcast to all**
+  // Listen for new messages from clients
   socket.on("sendMessage", (message) => {
-    io.emit("newMessage", message);
+    const receiverSocketId = userSocketMap[message.receiverId];
+    
+    // Emit new message only to the receiver if connected
+    if (receiverSocketId) {
+      io.to(receiverSocketId).emit("newMessage", message);
+    }
+
+    // Emit new message to sender as well (so they see their own message instantly)
+    socket.emit("newMessage", message);
   });
 
   socket.on("disconnect", () => {
     console.log("A user disconnected", socket.id);
-    delete userSocketMap[userId];
+    // Remove user from online map
+    if (userId) {
+      delete userSocketMap[userId];
+    }
+    // Notify all clients about updated online users
     io.emit("getOnlineUsers", Object.keys(userSocketMap));
   });
 });
