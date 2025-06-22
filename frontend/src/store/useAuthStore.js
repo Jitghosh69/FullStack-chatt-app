@@ -59,7 +59,7 @@ export const useAuthStore = create((set, get) => ({
   logout: async () => {
     try {
       await axiosInstance.post("/auth/logout");
-      set({ authUser: null });
+      set({ authUser: null, onlineUsers: [] }); // Reset online users on logout
       toast.success("Logged out successfully");
       get().disconnectSocket();
     } catch (error) {
@@ -92,13 +92,23 @@ export const useAuthStore = create((set, get) => ({
     newSocket.connect();
     set({ socket: newSocket });
 
-    newSocket.on("getOnlineUsers", (userIds) => {
-      set({ onlineUsers: userIds });
+    // Listen for online users
+    newSocket.on("getOnlineUsers", (users) => {
+      set({ onlineUsers: users }); // Update onlineUsers in the store
     });
+
+    // Add more socket events here as needed
   },
 
   disconnectSocket: () => {
     const socket = get().socket;
-    if (socket?.connected) socket.disconnect();
+    if (socket?.connected) {
+      socket.disconnect();
+      set({ socket: null }); // Reset socket state on disconnect
+    }
+  },
+
+  setOnlineUsers: (users) => {
+    set({ onlineUsers: users }); // Explicitly setting online users in the store
   },
 }));

@@ -26,31 +26,34 @@ const ChatContainer = () => {
 
     getMessages(selectedUser._id); // Get message history
 
+    const handleReceiveMessage = (newMessage) => {
+      const isInChat =
+        newMessage.senderId === selectedUser._id ||
+        newMessage.receiverId === selectedUser._id;
+
+      if (isInChat) {
+        setMessages((prev) => ({
+          ...prev,
+          [selectedUser._id]: [...(prev[selectedUser._id] || []), newMessage],
+        }));
+      }
+    };
+
     if (socket) {
-      // ✅ Listen for incoming real-time message
-      socket.on("receiveMessage", (newMessage) => {
-        // Only push if the message belongs to this conversation
-        if (
-          newMessage.senderId === selectedUser._id ||
-          newMessage.receiverId === selectedUser._id
-        ) {
-          setMessages((prev) => [...prev, newMessage]);
-        }
-      });
+      socket.on("receiveMessage", handleReceiveMessage);
     }
 
-    // ✅ Clean up listener on unmount
     return () => {
-      if (socket) socket.off("receiveMessage");
+      if (socket) socket.off("receiveMessage", handleReceiveMessage);
     };
-  }, [selectedUser._id, socket, getMessages, setMessages]);
+  }, [selectedUser?._id, socket, getMessages, setMessages]);
 
   // Auto-scroll to bottom on new message
   useEffect(() => {
     if (messageEndRef.current) {
       messageEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
-  }, [messages]);
+  }, [messages, selectedUser?._id]);
 
   if (isMessagesLoading) {
     return (
@@ -67,45 +70,46 @@ const ChatContainer = () => {
       <ChatHeader />
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.map((message) => (
-          <div
-            key={message._id}
-            className={`chat ${
-              message.senderId === authUser._id ? "chat-end" : "chat-start"
-            }`}
-            ref={messageEndRef}
-          >
-            <div className="chat-image avatar">
-              <div className="size-10 rounded-full border">
-                <img
-                  src={
-                    message.senderId === authUser._id
-                      ? authUser.profilePic || "/avatar.png"
-                      : selectedUser.profilePic || "/avatar.png"
-                  }
-                  alt="profile pic"
-                />
+        {Array.isArray(messages[selectedUser._id]) &&
+          messages[selectedUser._id].map((message) => (
+            <div
+              key={message._id}
+              className={`chat ${
+                message.senderId === authUser._id ? "chat-end" : "chat-start"
+              }`}
+              ref={messageEndRef}
+            >
+              <div className="chat-image avatar">
+                <div className="size-10 rounded-full border">
+                  <img
+                    src={
+                      message.senderId === authUser._id
+                        ? authUser.profilePic || "/avatar.png"
+                        : selectedUser.profilePic || "/avatar.png"
+                    }
+                    alt="profile pic"
+                  />
+                </div>
+              </div>
+
+              <div className="chat-header mb-1">
+                <time className="text-xs opacity-50 ml-1">
+                  {formatMessageTime(message.createdAt)}
+                </time>
+              </div>
+
+              <div className="chat-bubble flex flex-col">
+                {message.image && (
+                  <img
+                    src={message.image}
+                    alt="Attachment"
+                    className="sm:max-w-[200px] rounded-md mb-2"
+                  />
+                )}
+                {message.text && <p>{message.text}</p>}
               </div>
             </div>
-
-            <div className="chat-header mb-1">
-              <time className="text-xs opacity-50 ml-1">
-                {formatMessageTime(message.createdAt)}
-              </time>
-            </div>
-
-            <div className="chat-bubble flex flex-col">
-              {message.image && (
-                <img
-                  src={message.image}
-                  alt="Attachment"
-                  className="sm:max-w-[200px] rounded-md mb-2"
-                />
-              )}
-              {message.text && <p>{message.text}</p>}
-            </div>
-          </div>
-        ))}
+          ))}
       </div>
 
       <MessageInput />

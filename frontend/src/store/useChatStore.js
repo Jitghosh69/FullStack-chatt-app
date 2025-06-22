@@ -1,14 +1,18 @@
+// src/store/useChatStore.jsx
+
 import { create } from "zustand";
 import toast from "react-hot-toast";
 import { axiosInstance } from "../lib/axios";
+import { useAuthStore } from "./useAuthStore";  // Import auth store to get socket
 
 export const useChatStore = create((set, get) => ({
-  messages: {}, // Change to an object to store messages by userId
+  messages: {}, // Store messages by userId
   users: [],
   selectedUser: null,
   isUsersLoading: false,
   isMessagesLoading: false,
 
+  // Fetch users
   getUsers: async () => {
     set({ isUsersLoading: true });
     try {
@@ -21,15 +25,15 @@ export const useChatStore = create((set, get) => ({
     }
   },
 
+  // Fetch messages by userId
   getMessages: async (userId) => {
     const { messages } = get();
-    // Check if messages are already loaded for the selected user
     if (messages[userId]) return;
 
     set({ isMessagesLoading: true });
     try {
       const res = await axiosInstance.get(`/messages/${userId}`);
-      set({ messages: { ...messages, [userId]: res.data } }); // Store messages by userId
+      set({ messages: { ...messages, [userId]: res.data } });
     } catch (error) {
       toast.error(error?.response?.data?.error || "Failed to load messages");
     } finally {
@@ -37,6 +41,7 @@ export const useChatStore = create((set, get) => ({
     }
   },
 
+  // Send a message
   sendMessage: async (messageData) => {
     const { selectedUser, messages } = get();
     try {
@@ -44,17 +49,23 @@ export const useChatStore = create((set, get) => ({
         `/messages/send/${selectedUser._id}`,
         messageData
       );
-      // Optimistic update (adds the new message without waiting for the server response)
       const updatedMessages = {
         ...messages,
         [selectedUser._id]: [...(messages[selectedUser._id] || []), res.data],
       };
       set({ messages: updatedMessages });
+
+      // Emit socket event for real-time updates
+      const socket = useAuthStore.getState().socket;
+      if (socket && socket.connected) {
+        socket.emit("sendMessage", res.data);
+      }
     } catch (error) {
       toast.error(error?.response?.data?.error || "Failed to send message");
     }
   },
 
+  // Set the selected user
   setSelectedUser: (selectedUser) => set({ selectedUser }),
 
   // Real-time message update method

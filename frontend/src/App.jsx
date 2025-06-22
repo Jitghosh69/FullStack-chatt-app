@@ -1,6 +1,5 @@
-import { useEffect, useState, createContext } from "react";
+import { useEffect, createContext } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
-import { io } from "socket.io-client";
 import Navbar from "./components/Navbar";
 import HomePage from "./pages/HomePage";
 import SignUpPage from "./pages/SignUpPage";
@@ -10,51 +9,57 @@ import ProfilePage from "./pages/ProfilePage";
 
 import { useAuthStore } from "./store/useAuthStore";
 import { useThemeStore } from "./store/useThemeStore";
-import { useChatStore } from "./store/useChatStore"; // ✅ import chat store
+import { useChatStore } from "./store/useChatStore";
 import { Loader } from "lucide-react";
 import { Toaster } from "react-hot-toast";
 
 export const SocketContext = createContext(null);
 
 const App = () => {
-  const { authUser, checkAuth, isCheckingAuth, setOnlineUsers } = useAuthStore();
+  const { authUser, checkAuth, isCheckingAuth, socket, setOnlineUsers } = useAuthStore();
   const { theme } = useThemeStore();
-  const { setMessages } = useChatStore(); // ✅ get setMessages from chat store
-  const [socket, setSocket] = useState(null);
+  const { setMessages } = useChatStore();
 
   useEffect(() => {
     checkAuth();
   }, [checkAuth]);
 
   useEffect(() => {
-    if (authUser?._id) {
-      const socketInstance = io("http://localhost:5002", {
-        query: { userId: authUser._id },
+    if (!socket) return;
+
+    const handleNewMessage = (newMessage) => {
+      setMessages((prevMessages) => {
+        const updatedMessages = { ...prevMessages };
+        // Determine which chat to update based on sender and receiver IDs
+        const chatUserId =
+          newMessage.senderId === authUser._id
+            ? newMessage.receiverId
+            : newMessage.senderId;
+
+        updatedMessages[chatUserId] = [
+          ...(updatedMessages[chatUserId] || []),
+          newMessage,
+        ];
+        return updatedMessages;
       });
+    };
 
-      setSocket(socketInstance);
+    const handleOnlineUsers = (users) => {
+      setOnlineUsers(users);
+    };
 
-      socketInstance.on("connect", () => {
-        console.log("✅ Connected to socket.io:", socketInstance.id);
-      });
+    socket.on("connect", () => console.log("✅ Socket connected:", socket.id));
+    socket.on("newMessage", handleNewMessage);
+    socket.on("getOnlineUsers", handleOnlineUsers);
+    socket.on("disconnect", () => console.log("❌ Socket disconnected"));
 
-      socketInstance.on("getOnlineUsers", (users) => {
-        setOnlineUsers(users);
-      });
-
-      socketInstance.on("newMessage", (newMessage) => {
-        setMessages((prevMessages) => [...prevMessages, newMessage]);
-      });
-
-      socketInstance.on("disconnect", () => {
-        console.log("❌ Socket disconnected");
-      });
-
-      return () => {
-        socketInstance.disconnect();
-      };
-    }
-  }, [authUser, setOnlineUsers, setMessages]);
+    return () => {
+      socket.off("connect");
+      socket.off("newMessage", handleNewMessage);
+      socket.off("getOnlineUsers", handleOnlineUsers);
+      socket.off("disconnect");
+    };
+  }, [socket, authUser, setMessages, setOnlineUsers]);
 
   if (isCheckingAuth && !authUser) {
     return (
